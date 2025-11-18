@@ -1,3 +1,4 @@
+// g++ -std=c++17 -O2 main.cpp -o pz3
 #include <iostream>
 #include <vector>
 #include <string>
@@ -328,13 +329,16 @@ public:
             throw std::invalid_argument("Модуль не может быть нулём");
         }
         BigNumber base = (*this) % modulus;
+        if (base < 0) base = base + modulus; // Исправление для отрицательных остатков
         BigNumber exp = exponent;
         BigNumber result(1);
         while (exp > BigNumber(0)) {
             if (exp.digits[0] % 2 == 1) {
                 result = (result * base) % modulus;
+                if (result < 0) result = result + modulus; // Исправление для отрицательных остатков
             }
             base = (base * base) % modulus;
+            if (base < 0) base = base + modulus; // Исправление для отрицательных остатков
             exp = exp / BigNumber(2);
         }
         return result;
@@ -367,6 +371,7 @@ public:
             bool composite = true;
             for (int r = 1; r < s; r++) {
                 x = (x * x) % (*this);
+                if (x < 0) x = x + *this; // Исправление для отрицательных остатков
                 if (x == n_minus_1) {
                     composite = false;
                     break;
@@ -386,6 +391,7 @@ public:
             return 0;
         }
         a = a % n;
+        if (a < 0) a = a + n; // Убедимся, что a неотрицательно
         int result = 1;
         while (a != BigNumber(0)) {
             while (a.isEven()) {
@@ -397,11 +403,14 @@ public:
             }
             a.swap(n);
             BigNumber a_mod_4 = a % BigNumber(4);
+            if (a_mod_4 < 0) a_mod_4 = a_mod_4 + BigNumber(4); // Исправление
             BigNumber n_mod_4 = n % BigNumber(4);
+            if (n_mod_4 < 0) n_mod_4 = n_mod_4 + BigNumber(4); // Исправление
             if (a_mod_4 == BigNumber(3) && n_mod_4 == BigNumber(3)) {
                 result = -result;
             }
             a = a % n;
+            if (a < 0) a = a + n; // Исправление
         }
         if (n == BigNumber(1)) {
             return result;
@@ -464,10 +473,15 @@ public:
         for (int i = binary_d.size() - 1; i >= 0; i--) {
             // Удваиваем индекс: (m, m+1) -> (2m, 2m+1)
             BigNumber u_2m = (u_curr * v_prev) % (*this);
+            if (u_2m < 0) u_2m = u_2m + *this; // Исправление
             BigNumber v_2m = (v_curr * v_prev - BigNumber(2) * q_power) % (*this);
+            if (v_2m < 0) v_2m = v_2m + *this; // Исправление
             BigNumber u_2m_plus_1 = (u_curr * v_curr - q_power) % (*this);
+            if (u_2m_plus_1 < 0) u_2m_plus_1 = u_2m_plus_1 + *this; // Исправление
             BigNumber v_2m_plus_1 = (u_curr * v_curr + P * q_power) % (*this);
+            if (v_2m_plus_1 < 0) v_2m_plus_1 = v_2m_plus_1 + *this; // Исправление
             BigNumber q_power_2 = (q_power * q_power) % (*this);
+            if (q_power_2 < 0) q_power_2 = q_power_2 + *this; // Исправление
 
             if (binary_d[i]) {
                 // Переходим к (2m+1, 2m+2)
@@ -487,7 +501,9 @@ public:
         }
 
         BigNumber u_d = u_curr;
+        if (u_d < 0) u_d = u_d + *this; // Исправление
         BigNumber v_d = v_curr;
+        if (v_d < 0) v_d = v_d + *this; // Исправление
 
         // Шаг 4: Проверка условий сильной псевдопростоты Люка
         if (u_d == BigNumber(0)) {
@@ -499,13 +515,63 @@ public:
                 return true;
             }
             v_d = (v_d * v_d - BigNumber(2) * q_power) % (*this);
+            if (v_d < 0) v_d = v_d + *this; // Исправление
             q_power = (q_power * q_power) % (*this);
+            if (q_power < 0) q_power = q_power + *this; // Исправление
         }
 
         return false;
     }
 
-    // === КОНЕЦ НОВЫХ МЕТОДОВ ===
+    // === НОВЫЕ МЕТОДЫ ДЛЯ ТЕСТА БЕЙЛИ–ПОМЕРАНЦА–СЕЛФРИДЖА–УОГСТАФФА (BPSW) ===
+
+    bool bailliePomeranceSelfridgeWagstaffTest() const {
+        if (*this <= BigNumber(1)) return false;
+        if (*this == BigNumber(2) || *this == BigNumber(3)) return true;
+        if (isEven()) return false;
+
+        // Шаг 1: Проверить с помощью теста Миллера-Рабина с основанием 2
+        // Это быстрая предварительная проверка
+        if (!millerRabinTestWithBase2()) {
+            return false;
+        }
+
+        // Шаг 2: Проверить с помощью теста Люка на сильную псевдопростоту
+        return lucasStrongPseudoprimeTest();
+    }
+
+private:
+    bool millerRabinTestWithBase2() const {
+        if (*this <= BigNumber(1)) return false;
+        if (*this == BigNumber(2)) return true;
+        if (isEven()) return false;
+
+        BigNumber n_minus_1 = *this - BigNumber(1);
+        BigNumber d = n_minus_1;
+        int s = 0;
+        while (d.isEven()) {
+            d = d.divideByTwo();
+            s++;
+        }
+
+        BigNumber a(2);
+        BigNumber x = a.modPow(d, *this);
+        if (x == BigNumber(1) || x == n_minus_1) {
+            return true;
+        }
+
+        for (int r = 1; r < s; r++) {
+            x = (x * x) % (*this);
+            if (x < 0) x = x + *this; // Исправление для отрицательных остатков
+            if (x == n_minus_1) {
+                return true;
+            }
+        }
+        return false;
+    }
+// === КОНЕЦ НОВЫХ МЕТОДОВ ===
+
+public:
 
     static BigNumber gcd(BigNumber a, BigNumber b) {
         return binaryGCD(a, b);
@@ -541,15 +607,20 @@ public:
 int main() {
     setlocale(LC_ALL, "ru");
     try {
-        std::cout << "Практическая работа №3: Тест Миллера–Рабина и тест Люка\n";
+        std::cout << "Практическая работа №3: Тест Миллера–Рабина, тест Люка и тест BPSW\n";
         std::cout << "================================================\n";
 
         // Известное простое число: M(127) = 2^127 - 1
-        BigNumber knownPrime("170141183460469231731687303715884105727");
+        //BigNumber knownPrime("170141183460469231731687303715884105727"); // Используйте правильное число
+         BigNumber knownPrime("57"); // Для тестирования составного числа
 
         std::cout << "🔹 Тестируемое число:\n";
         std::cout << "   Значение: " << knownPrime.toString() << "\n";
-        std::cout << "   Описание: число Мерсенна M(127) = 2^127 - 1 (известное простое)\n";
+        if (knownPrime.toString() == "57") {
+             std::cout << "   Описание: составное число 57 = 3 * 19\n";
+        } else {
+             std::cout << "   Описание: число Мерсенна M(127) = 2^127 - 1 (известное простое)\n";
+        }
         std::cout << "   Количество цифр: " << knownPrime.size() << "\n\n";
 
         const int trials = 100;
@@ -652,6 +723,59 @@ int main() {
             lucasSummary << "Вывод: " << (lucasFalseNegatives == 0 ? "Сильное Люка-псевдопростое" : "Не сильное Люка-псевдопростое") << "\n";
             lucasSummary.close();
         }
+
+        std::cout << "\n";
+
+        // === ТЕСТ БЕЙЛИ–ПОМЕРАНЦА–СЕЛФРИДЖА–УОГСТАФФА (BPSW) ===
+        std::cout << "🔹 Тестируем тест Бейли–Померанца–Селфриджа–Уогстаффа (BPSW)...\n";
+
+        // Открываем файл для записи лога теста BPSW
+        std::ofstream bpswLogFile("bpsw_trials.log");
+        if (!bpswLogFile.is_open()) {
+            throw std::runtime_error("Не удалось создать файл лога: bpsw_trials.log");
+        }
+
+        std::cout << " Запуск " << trials << " итераций теста BPSW...\n";
+
+        int bpswFalseNegatives = 0;
+        for (int i = 1; i <= trials; i++) {
+            // Тест BPSW детерминирован для каждого запуска, так как не использует случайности
+            // Поэтому мы просто проверим, что тест проходит все разы
+            bool isBPSWPrime = knownPrime.bailliePomeranceSelfridgeWagstaffTest();
+            if (!isBPSWPrime) {
+                bpswFalseNegatives++;
+                bpswLogFile << "Прогон " << i << ": FAIL\n";
+            } else {
+                bpswLogFile << "Прогон " << i << ": PASS\n";
+            }
+        }
+        bpswLogFile.close();
+        std::cout << "Тестирование BPSW завершено. Лог сохранён в bpsw_trials.log\n\n";
+
+        // Вывод итоговой статистики для теста BPSW
+        std::cout << "РЕЗУЛЬТАТЫ ТЕСТА BPSW\n";
+        std::cout << "─────────────────────────────────────\n";
+        std::cout << "Всего прогонов:        " << trials << "\n";
+        std::cout << "Ложных отрицаний:      " << bpswFalseNegatives << "\n";
+        std::cout << "Точность:              " << (100.0 - (100.0 * bpswFalseNegatives / trials)) << "%\n";
+        std::cout << "Вывод:                 ";
+        if (bpswFalseNegatives == 0) {
+            std::cout << "Число подтверждено как BPSW-псевдопростое во всех прогонах.\n";
+        } else {
+            std::cout << "Обнаружены отклонения — число не является BPSW-псевдопростым.\n";
+        }
+        std::cout << "\n";
+
+        // Сохраняем краткий итог теста BPSW в отдельный файл
+        std::ofstream bpswSummary("bpsw_results.txt");
+        if (bpswSummary.is_open()) {
+            bpswSummary << "Число: " << knownPrime.toString() << "\n";
+            bpswSummary << "Прогонов: " << trials << "\n";
+            bpswSummary << "Ложных отрицаний: " << bpswFalseNegatives << "\n";
+            bpswSummary << "Вывод: " << (bpswFalseNegatives == 0 ? "BPSW-псевдопростое" : "Не BPSW-псевдопростое") << "\n";
+            bpswSummary.close();
+        }
+
 
     } catch (const std::exception& e) {
         std::cerr << "Ошибка: " << e.what() << std::endl;
