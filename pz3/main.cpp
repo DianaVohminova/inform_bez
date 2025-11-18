@@ -379,6 +379,132 @@ public:
         return true;
     }
 
+    // === НОВЫЕ МЕТОДЫ ДЛЯ ТЕСТА ЛЮКА ===
+    
+    static int jacobiSymbol(BigNumber a, BigNumber n) {
+        if (n <= BigNumber(0) || n.isEven()) {
+            return 0;
+        }
+        a = a % n;
+        int result = 1;
+        while (a != BigNumber(0)) {
+            while (a.isEven()) {
+                a = a.divideByTwo();
+                BigNumber n_mod_8 = n % BigNumber(8);
+                if (n_mod_8 == BigNumber(3) || n_mod_8 == BigNumber(5)) {
+                    result = -result;
+                }
+            }
+            a.swap(n);
+            BigNumber a_mod_4 = a % BigNumber(4);
+            BigNumber n_mod_4 = n % BigNumber(4);
+            if (a_mod_4 == BigNumber(3) && n_mod_4 == BigNumber(3)) {
+                result = -result;
+            }
+            a = a % n;
+        }
+        if (n == BigNumber(1)) {
+            return result;
+        } else {
+            return 0;
+        }
+    }
+
+    void swap(BigNumber& other) {
+        std::swap(digits, other.digits);
+        std::swap(isNegative, other.isNegative);
+    }
+
+    bool lucasStrongPseudoprimeTest() const {
+        if (*this <= BigNumber(1)) return false;
+        if (*this == BigNumber(2) || *this == BigNumber(3)) return true;
+        if (isEven()) return false;
+
+        // Шаг 1: Найти D, удовлетворяющее условиям
+        int D = 5;
+        int sign = 1;
+        while (true) {
+            BigNumber D_bn(D * sign);
+            int j = jacobiSymbol(D_bn, *this);
+            if (j == -1) {
+                break;
+            }
+            D += 2;
+            sign = -sign;
+        }
+        BigNumber P(1);
+        BigNumber Q((P * P - BigNumber(D)) / BigNumber(4));
+
+        // Шаг 2: Представить n - (D/n) = n - (-1) = n + 1 как d * 2^s
+        BigNumber n_plus_1 = *this + BigNumber(1);
+        BigNumber d = n_plus_1;
+        int s = 0;
+        while (d.isEven()) {
+            d = d.divideByTwo();
+            s++;
+        }
+
+        // Шаг 3: Вычислить U_d и V_d по модулю n
+        // Используем двоичное представление d для вычисления последовательностей Люка
+        std::vector<bool> binary_d;
+        BigNumber temp_d = d;
+        while (temp_d > BigNumber(0)) {
+            binary_d.push_back(temp_d.digits[0] % 2 == 1);
+            temp_d = temp_d.divideByTwo();
+        }
+
+        // Начальные значения для U и V
+        BigNumber u_prev = BigNumber(0); // U_0
+        BigNumber v_prev = BigNumber(2); // V_0
+        BigNumber u_curr = BigNumber(1); // U_1
+        BigNumber v_curr = BigNumber(1); // V_1
+        BigNumber q_power = Q; // Q^1
+
+        // Проходим по битам d справа налево (от младших к старшим)
+        for (int i = binary_d.size() - 1; i >= 0; i--) {
+            // Удваиваем индекс: (m, m+1) -> (2m, 2m+1)
+            BigNumber u_2m = (u_curr * v_prev) % (*this);
+            BigNumber v_2m = (v_curr * v_prev - BigNumber(2) * q_power) % (*this);
+            BigNumber u_2m_plus_1 = (u_curr * v_curr - q_power) % (*this);
+            BigNumber v_2m_plus_1 = (u_curr * v_curr + P * q_power) % (*this);
+            BigNumber q_power_2 = (q_power * q_power) % (*this);
+
+            if (binary_d[i]) {
+                // Переходим к (2m+1, 2m+2)
+                u_prev = u_curr;
+                v_prev = v_curr;
+                u_curr = u_2m_plus_1;
+                v_curr = v_2m_plus_1;
+                q_power = q_power_2;
+            } else {
+                // Переходим к (2m, 2m+1)
+                u_prev = u_2m;
+                v_prev = v_2m;
+                u_curr = u_2m_plus_1;
+                v_curr = v_2m_plus_1;
+                q_power = q_power_2;
+            }
+        }
+
+        BigNumber u_d = u_curr;
+        BigNumber v_d = v_curr;
+
+        // Шаг 4: Проверка условий сильной псевдопростоты Люка
+        if (u_d == BigNumber(0)) {
+            return true;
+        }
+
+        for (int r = 0; r < s; r++) {
+            if (v_d == BigNumber(0)) {
+                return true;
+            }
+            v_d = (v_d * v_d - BigNumber(2) * q_power) % (*this);
+            q_power = (q_power * q_power) % (*this);
+        }
+
+        return false;
+    }
+
     // === КОНЕЦ НОВЫХ МЕТОДОВ ===
 
     static BigNumber gcd(BigNumber a, BigNumber b) {
@@ -415,7 +541,7 @@ public:
 int main() {
     setlocale(LC_ALL, "ru");
     try {
-        std::cout << "Практическая работа №3: Тест Миллера–Рабина\n";
+        std::cout << "Практическая работа №3: Тест Миллера–Рабина и тест Люка\n";
         std::cout << "================================================\n";
 
         // Известное простое число: M(127) = 2^127 - 1
@@ -428,6 +554,9 @@ int main() {
 
         const int trials = 100;
         const int roundsPerTrial = 10;
+
+        // === ТЕСТ МИЛЛЕРА–РАБИНА ===
+        std::cout << "🔹 Тестируем тест Миллера–Рабина...\n";
 
         // Открываем файл для записи лога прогонов
         std::ofstream logFile("miller_rabin_trials.log");
@@ -449,10 +578,10 @@ int main() {
             }
         }
         logFile.close();
-        std::cout << "Тестирование завершено. Лог сохранён в miller_rabin_trials.log\n\n";
+        std::cout << "Тестирование Миллера–Рабина завершено. Лог сохранён в miller_rabin_trials.log\n\n";
 
-        // Вывод итоговой статистики
-        std::cout << "РЕЗУЛЬТАТЫ ТЕСТА\n";
+        // Вывод итоговой статистики для теста Миллера–Рабина
+        std::cout << "РЕЗУЛЬТАТЫ ТЕСТА МИЛЛЕРА–РАБИНА\n";
         std::cout << "─────────────────────────────────────\n";
         std::cout << "Всего прогонов:        " << trials << "\n";
         std::cout << "Баз на прогон:         " << roundsPerTrial << "\n";
@@ -473,6 +602,55 @@ int main() {
             summary << "Ложных отрицаний: " << falseNegatives << "\n";
             summary << "Вывод: " << (falseNegatives == 0 ? "Простое" : "Ошибки") << "\n";
             summary.close();
+        }
+
+        std::cout << "\n";
+
+        // === ТЕСТ ЛЮКА ===
+        std::cout << "🔹 Тестируем тест Люка на сильную псевдопростоту...\n";
+
+        // Открываем файл для записи лога теста Люка
+        std::ofstream lucasLogFile("lucas_trials.log");
+        if (!lucasLogFile.is_open()) {
+            throw std::runtime_error("Не удалось создать файл лога: lucas_trials.log");
+        }
+
+        std::cout << " Запуск " << trials << " итераций теста Люка...\n";
+
+        int lucasFalseNegatives = 0;
+        for (int i = 1; i <= trials; i++) {
+            bool isStrongPseudoprime = knownPrime.lucasStrongPseudoprimeTest();
+            if (!isStrongPseudoprime) {
+                lucasFalseNegatives++;
+                lucasLogFile << "Прогон " << i << ": FAIL\n";
+            } else {
+                lucasLogFile << "Прогон " << i << ": PASS\n";
+            }
+        }
+        lucasLogFile.close();
+        std::cout << "Тестирование Люка завершено. Лог сохранён в lucas_trials.log\n\n";
+
+        // Вывод итоговой статистики для теста Люка
+        std::cout << "РЕЗУЛЬТАТЫ ТЕСТА ЛЮКА\n";
+        std::cout << "─────────────────────────────────────\n";
+        std::cout << "Всего прогонов:        " << trials << "\n";
+        std::cout << "Ложных отрицаний:      " << lucasFalseNegatives << "\n";
+        std::cout << "Точность:              " << (100.0 - (100.0 * lucasFalseNegatives / trials)) << "%\n";
+        std::cout << "Вывод:                 ";
+        if (lucasFalseNegatives == 0) {
+            std::cout << "Число подтверждено как сильное Люка-псевдопростое во всех прогонах.\n";
+        } else {
+            std::cout << "Обнаружены отклонения — число не является сильным Люка-псевдопростым.\n";
+        }
+
+        // Сохраняем краткий итог теста Люка в отдельный файл
+        std::ofstream lucasSummary("lucas_results.txt");
+        if (lucasSummary.is_open()) {
+            lucasSummary << "Число: " << knownPrime.toString() << "\n";
+            lucasSummary << "Прогонов: " << trials << "\n";
+            lucasSummary << "Ложных отрицаний: " << lucasFalseNegatives << "\n";
+            lucasSummary << "Вывод: " << (lucasFalseNegatives == 0 ? "Сильное Люка-псевдопростое" : "Не сильное Люка-псевдопростое") << "\n";
+            lucasSummary.close();
         }
 
     } catch (const std::exception& e) {
